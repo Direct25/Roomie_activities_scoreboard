@@ -6,6 +6,10 @@ import { authLimiter } from './middleware/limits';
 import { errorHandler, notFound } from './middleware/errors';
 import { activitiesRouter } from './routes/activities';
 import { authRouter } from './routes/auth';
+import { badgesRouter } from './routes/badges';
+import { bountiesRouter } from './routes/bounties';
+import { challengesRouter } from './routes/challenges';
+import { prizesRouter } from './routes/prizes';
 import { entriesRouter } from './routes/entries';
 import { householdsRouter } from './routes/households';
 import { leaderboardRouter } from './routes/leaderboard';
@@ -29,6 +33,10 @@ export function createApp() {
   app.use('/api/activities', activitiesRouter);
   app.use('/api/entries', entriesRouter);
   app.use('/api/leaderboard', leaderboardRouter);
+  app.use('/api/bounties', bountiesRouter);
+  app.use('/api/challenges', challengesRouter);
+  app.use('/api/prizes', prizesRouter);
+  app.use('/api/badges', badgesRouter);
 
   app.use(notFound);
   app.use(errorHandler);

@@ -114,6 +114,17 @@ describe('buildStandings', () => {
     ]);
   });
 
+  it('does not let bonus-only days (count 0) extend a streak', () => {
+    const withBonus = [
+      bucket('a', '2026-W44', '2026-11-01', 25, 0), // a challenge win, no chores
+      bucket('a', '2026-W44', '2026-10-31', 10, 1),
+    ];
+    const standings = buildStandings(members, withBonus, { ...base, week: '2026-W44' });
+    const asha = standings.find((s) => s.name === 'Asha')!;
+    expect(asha.points).toBe(35);
+    expect(asha.streak).toBe(1); // yesterday's chore keeps it alive, today's bonus adds nothing
+  });
+
   it('adds crowns from finished weeks and streaks from the whole history', () => {
     const standings = buildStandings(members, buckets, { ...base, week: '2026-W44' });
     const byName = Object.fromEntries(standings.map((s) => [s.name, s]));

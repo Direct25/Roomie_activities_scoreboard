@@ -125,7 +125,7 @@ export function buildStandings(
       points: inScope.reduce((sum, b) => sum + b.points, 0),
       count: inScope.reduce((sum, b) => sum + b.count, 0),
       streak: currentStreak(
-        mine.map((b) => b.dayKey),
+        mine.filter((b) => b.count > 0).map((b) => b.dayKey),
         options.today,
       ),
       crowns: crowns.get(member.id) ?? 0,

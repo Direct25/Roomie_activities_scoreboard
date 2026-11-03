@@ -6,6 +6,8 @@ const userSchema = new Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     household: { type: Schema.Types.ObjectId, ref: 'Household', default: null, index: true },
+    // Optional UPI ID (name@bank) so roommates can pay prize money in one tap.
+    upiId: { type: String, default: '', trim: true },
   },
   { timestamps: true },
 );

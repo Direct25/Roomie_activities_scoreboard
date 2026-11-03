@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { z } from 'zod';
 import { HttpError, parse } from '../lib/http';
+import { UPI_ID_PATTERN } from '../lib/prizes';
 import { publicUser } from '../lib/views';
 import { requireAuth, signToken } from '../middleware/auth';
 import { User } from '../models/User';
@@ -46,4 +47,21 @@ authRouter.post('/login', async (req, res) => {
 
 authRouter.get('/me', requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user!) });
+});
+
+// Optional: lets roommates pay you in one tap. Send an empty string to remove it.
+const upiSchema = z.object({
+  upiId: z
+    .string()
+    .trim()
+    .max(80)
+    .refine((v) => v === '' || UPI_ID_PATTERN.test(v), 'Enter a UPI ID like name@bank'),
+});
+
+authRouter.put('/me/upi', requireAuth, async (req, res) => {
+  const { upiId } = parse(upiSchema, req.body);
+  const user = req.user!;
+  user.upiId = upiId;
+  await user.save();
+  res.json({ user: publicUser(user) });
 });

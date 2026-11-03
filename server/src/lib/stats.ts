@@ -15,24 +15,27 @@ export async function loadMembers(householdId: Types.ObjectId): Promise<Member[]
  */
 export async function loadBuckets(householdId: Types.ObjectId): Promise<Bucket[]> {
   const entries = await Entry.find({ household: householdId, status: 'counted' })
-    .select('user weekKey dayKey points')
+    .select('user kind weekKey dayKey points')
     .lean();
 
   const buckets = new Map<string, Bucket>();
   for (const entry of entries) {
     const userId = String(entry.user);
+    // Bonus points (like a challenge win) add to the score but aren't chores:
+    // they don't raise the chore count or keep a streak alive.
+    const chores = entry.kind === 'bonus' ? 0 : 1;
     const key = `${userId}|${entry.dayKey}`;
     const bucket = buckets.get(key);
     if (bucket) {
       bucket.points += entry.points;
-      bucket.count += 1;
+      bucket.count += chores;
     } else {
       buckets.set(key, {
         userId,
         weekKey: entry.weekKey,
         dayKey: entry.dayKey,
         points: entry.points,
-        count: 1,
+        count: chores,
       });
     }
   }

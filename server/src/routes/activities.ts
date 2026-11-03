@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { hotBonusFor, lastDoneByActivity } from '../lib/hot';
 import { HttpError, objectId, parse } from '../lib/http';
 import { activityView } from '../lib/views';
 import { householdIdOf, requireAuth } from '../middleware/auth';
 import { Activity } from '../models/Activity';
+import { Household } from '../models/Household';
 
 export const activitiesRouter = Router();
 activitiesRouter.use(requireAuth);
@@ -17,10 +19,16 @@ const createSchema = z.object({
 });
 
 activitiesRouter.get('/', async (req, res) => {
-  const activities = await Activity.find({ household: householdIdOf(req), archived: false }).sort({
-    createdAt: 1,
+  const householdId = householdIdOf(req);
+  const [household, activities, lastDone] = await Promise.all([
+    Household.findById(householdId).select('timezone'),
+    Activity.find({ household: householdId, archived: false }).sort({ createdAt: 1 }),
+    lastDoneByActivity(householdId),
+  ]);
+  const timeZone = household?.timezone ?? 'UTC';
+  res.json({
+    activities: activities.map((activity) => activityView(activity, hotBonusFor(activity, lastDone, timeZone))),
   });
-  res.json({ activities: activities.map(activityView) });
 });
 
 activitiesRouter.post('/', async (req, res) => {

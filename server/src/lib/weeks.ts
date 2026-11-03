@@ -53,6 +53,11 @@ export function addDays(key: string, days: number): string {
   return formatDay(d);
 }
 
+/** Whole days from one day key to another (negative if `to` is earlier). */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((parseDay(to).getTime() - parseDay(from).getTime()) / 86_400_000);
+}
+
 /** 1 = Monday ... 7 = Sunday */
 export function isoWeekday(key: string): number {
   return parseDay(key).getUTCDay() || 7;

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { resolveDue } from '../lib/challenges';
 import { HttpError } from '../lib/http';
 import { buildStandings, weeklyResults } from '../lib/scoring';
 import { loadBuckets, loadMembers } from '../lib/stats';
@@ -12,6 +13,9 @@ leaderboardRouter.use(requireAuth);
 async function loadContext(householdId: ReturnType<typeof householdIdOf>) {
   const household = await Household.findById(householdId);
   if (!household) throw new HttpError(404, 'Household not found');
+
+  // Finished challenges pay out their bonus points before anything is totalled.
+  await resolveDue(household);
 
   const today = dayKey(new Date(), household.timezone);
   const [members, buckets] = await Promise.all([loadMembers(householdId), loadBuckets(householdId)]);
