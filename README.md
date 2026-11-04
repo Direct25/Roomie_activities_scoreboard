@@ -12,7 +12,14 @@ Mobile-first web app. **Next.js + TypeScript** frontend, **Express + MongoDB** A
 - **Streaks and crowns.** 🔥 consecutive days with at least one chore. 👑 weekly wins from finished weeks.
 - **History.** Browse any past week or all-time standings, plus a "Weeks" tab with each finished week's winner.
 - **Fair play.** A roommate can **dispute** an entry, so it stops counting until the disputer takes it back. You can **undo** your own entries for 24 hours. Rapid double taps are ignored.
-- **Live-ish.** The board refreshes every 30 seconds and when the tab regains focus.
+- **Weekly prizes in ₹.** The top 3 each win ₹25 by default. The owner can change the amounts or turn prizes off. The week's prizes are added up and split equally between everyone, so winners are paid by the rest. A ledger shows who owes whom, with "mark as paid" and a one-tap **UPI pay link**. The app only keeps score of the money, it never moves any.
+- **Duels.** Challenge a roommate for 1, 3 or 7 days, on total points or on one chore ("dishes duel"), with optional bonus points for the winner. They have to accept, and only chores done after that count.
+- **Battle tab.** A live race of everyone's points this week, with a nudge about who to catch.
+- **Bounties.** Put +10 to +50 bonus points on a chore. The first roommate to do it claims them (never the person who posted it). Bounties expire after 3 days.
+- **Hot chores.** A chore nobody has done for 3 days gains 10% of its points per extra day, up to +50%, and cools off as soon as someone does it.
+- **Badges.** Lifetime achievements: streaks, points, weekly wins, duel wins, bounties claimed, and a "&lt;chore&gt; hero" for the chore you do most.
+- **Share to WhatsApp.** One tap turns a finished week into a recap for the group chat.
+- **Live-ish.** Everything refreshes every 30 seconds and when the tab regains focus.
 - **Dark mode** and safe-area support for phones.
 
 ## Market research
@@ -41,7 +48,7 @@ Caveat: the MyChoreBoard comparison is published by a competing vendor, so I onl
 
 ### Deliberately not built (yet)
 
-Photo proof, money or allowance, push notifications, bill splitting, chore rotation and reminders. These are the obvious next steps, listed under [Roadmap](#roadmap).
+Photo proof, push notifications, bill splitting, chore rotation and reminders. These are the obvious next steps, listed under [Roadmap](#roadmap). Prize money is tracked in a ledger but never processed by the app, on purpose: moving real money would bring payments compliance and fraud problems that a roommate scoreboard doesn't need.
 
 ## Tech stack
 
@@ -125,6 +132,16 @@ All routes are under `/api`. Everything except `/auth/register`, `/auth/login` a
 | POST | `/entries/:id/dispute`, `/entries/:id/reinstate` | Dispute a roommate's entry, or take a dispute back |
 | GET | `/leaderboard?week=2026-W44\|all` | Standings, defaults to the current week |
 | GET | `/leaderboard/history` | Winners of finished weeks |
+| GET/POST | `/bounties` | Open bounties, post a bounty on a chore |
+| DELETE | `/bounties/:id` | Take down your own unclaimed bounty |
+| GET/POST | `/challenges` | Duels (with live scores), send a challenge |
+| POST | `/challenges/:id/accept`, `/challenges/:id/decline` | Answer a challenge |
+| DELETE | `/challenges/:id` | Cancel a challenge nobody has accepted |
+| GET | `/prizes` | Prize rules, what you owe or are owed, and each settled week's ledger |
+| PUT | `/prizes/settings` | Owner only: turn prizes on or off, set the 1st/2nd/3rd amounts |
+| POST | `/prizes/:settlementId/transfers/:transferId/paid` | Mark a payment paid (or unpaid) |
+| PUT | `/auth/me/upi` | Save the UPI ID roommates use to pay you |
+| GET | `/badges` | Lifetime badges for everyone in the household |
 
 ## How scoring works
 
@@ -135,14 +152,30 @@ All routes are under `/api`. Everything except `/auth/register`, `/auth/login` a
 - A **crown** goes to the top scorer of each finished week (ties share the win).
 - Disputed entries are excluded from every total until reinstated.
 
+### Prizes and settling up
+
+- Each finished week is settled **once** and then frozen, so changing the prize amounts later never rewrites what people already owe.
+- The pot is the sum of the week's prizes (ties share a place and its prize). Everyone's share is the pot divided equally, and your balance is `prize won - share`. Payments go from the biggest debtor to the biggest creditor until everyone is square.
+- With ₹25 for the top 3, a 4-person flat means 4th place pays ₹18.75 in total, split across the three winners. In a 3-person flat equal prizes cancel out, so the Money tab suggests tiered prizes like ₹40 / ₹25 / ₹10.
+- Weeks are settled the first time anyone opens the app after they end (there is no background job). Joining or leaving settles any finished weeks first, so a newcomer never inherits last week's pot and a leaver can't dodge what they owe.
+- Only the two people in a payment can mark it paid, and either can undo it. The payer sees the winner's UPI ID and a pay link, nobody else does.
+
+### Duels, bounties, hot chores and badges
+
+- **Duels:** the opponent must accept within 48 hours. Scoring starts the day they accept, using counted chores only. When the last day passes, the winner gets the stake as a bonus entry. Bonus entries add points but are not chores, so they don't extend streaks or the chore count.
+- **Bounties:** claiming is atomic, so two roommates can't both take the same one. Undoing the chore puts the bounty back up.
+- **Hot chores:** the bonus is `round(base × min(50%, 10% × (days untouched − 2)))`, at least 1 point, from day 3. It stacks with a bounty.
+- **Badges** come from lifetime numbers and have three tiers each, for example streaks at 3 / 7 / 14 days and points at 100 / 500 / 1000.
+
 ## Roadmap
 
 - Photo proof for chores and a "verify" tap from a roommate
 - Recurring chores and rotation, with reminders
-- Web push notifications ("Ben just did the bathroom 😮")
-- Optional prizes for the weekly winner (loser buys pizza)
+- Web push notifications ("Ben just did the bathroom 😮", "Asha challenged you")
 - Real-time updates over WebSockets instead of polling
-- Household owner role (rename, remove members, regenerate the join code)
+- More owner powers (rename the household, remove members, regenerate the join code). Today the owner only controls prizes, and ownership passes to the longest-standing roommate if they leave.
+- Household-vs-household leagues
+- An image version of the weekly recap for sharing
 
 ## License
 
