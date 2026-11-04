@@ -62,6 +62,10 @@ export default function Home() {
     setSession({ status: "ready", user, household: null });
   }, []);
 
+  const updateUser = useCallback((user: User) => {
+    setSession((prev) => (prev.status === "ready" ? { ...prev, user } : prev));
+  }, []);
+
   if (session.status === "loading") {
     return <p className="grid min-h-dvh place-items-center text-muted">Loading…</p>;
   }
@@ -99,5 +103,13 @@ export default function Home() {
     );
   }
 
-  return <Dashboard user={session.user} household={session.household} onSignOut={signOut} onLeft={left} />;
+  return (
+    <Dashboard
+      user={session.user}
+      household={session.household}
+      onSignOut={signOut}
+      onLeft={left}
+      onUserUpdated={updateUser}
+    />
+  );
 }

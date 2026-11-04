@@ -2,20 +2,37 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Activity, Entry, Household, Leaderboard, User, WeekResult } from "@/lib/types";
+import { shareText, weekShareText } from "@/lib/share";
+import type {
+  Activity,
+  Bounty,
+  Challenge,
+  Entry,
+  Household,
+  Leaderboard,
+  MemberBadges,
+  NewChallenge,
+  Prizes,
+  Settlement,
+  Transfer,
+  User,
+  WeekResult,
+} from "@/lib/types";
+import { BattleTab } from "./BattleTab";
 import { BoardTab } from "./BoardTab";
 import { FeedTab } from "./FeedTab";
 import { LogTab } from "./LogTab";
-import { WeeksTab } from "./WeeksTab";
+import { MoneyTab } from "./MoneyTab";
 import { Button, ErrorNote } from "./ui";
 
-type Tab = "board" | "log" | "feed" | "weeks";
+type Tab = "board" | "log" | "battle" | "feed" | "money";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "board", label: "Board", icon: "🏆" },
   { id: "log", label: "Log", icon: "➕" },
+  { id: "battle", label: "Battle", icon: "⚔️" },
   { id: "feed", label: "Feed", icon: "📰" },
-  { id: "weeks", label: "Weeks", icon: "📅" },
+  { id: "money", label: "Money", icon: "💰" },
 ];
 
 interface ToastState {
@@ -25,6 +42,20 @@ interface ToastState {
   action?: { label: string; run: () => void };
 }
 
+interface Data {
+  /** This week, always. The race and the duel clock use it. */
+  current: Leaderboard;
+  /** Whatever week the person picked on the Board tab (usually the same as `current`). */
+  board: Leaderboard;
+  activities: Activity[];
+  entries: Entry[];
+  history: WeekResult[];
+  bounties: Bounty[];
+  challenges: Challenge[];
+  prizes: Prizes;
+  badges: MemberBadges[];
+}
+
 const REFRESH_MS = 30_000;
 
 export function Dashboard({
@@ -32,17 +63,16 @@ export function Dashboard({
   household,
   onSignOut,
   onLeft,
+  onUserUpdated,
 }: {
   user: User;
   household: Household;
   onSignOut: () => void;
   onLeft: (user: User) => void;
+  onUserUpdated: (user: User) => void;
 }) {
   const [tab, setTab] = useState<Tab>("board");
-  const [board, setBoard] = useState<Leaderboard | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [history, setHistory] = useState<WeekResult[]>([]);
+  const [data, setData] = useState<Data | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const selectedWeek = useRef<string | undefined>(undefined);
@@ -55,16 +85,30 @@ export function Dashboard({
 
   const refresh = useCallback(async () => {
     try {
-      const [b, a, e, h] = await Promise.all([
-        api.leaderboard(selectedWeek.current),
+      // These two settle finished duels and finished weeks on the server, so run them first
+      // and the numbers below already include any payouts.
+      const [challenges, prizes] = await Promise.all([api.challenges(), api.prizes()]);
+      const [current, a, e, h, bo, bd] = await Promise.all([
+        api.leaderboard(),
         api.activities(),
         api.entries(),
         api.history(),
+        api.bounties(),
+        api.badges(),
       ]);
-      setBoard(b);
-      setActivities(a.activities);
-      setEntries(e.entries);
-      setHistory(h.history);
+      const week = selectedWeek.current;
+      const board = week && week !== current.currentWeek ? await api.leaderboard(week) : current;
+      setData({
+        current,
+        board,
+        activities: a.activities,
+        entries: e.entries,
+        history: h.history,
+        bounties: bo.bounties,
+        challenges: challenges.challenges,
+        prizes,
+        badges: bd.badges,
+      });
       setLoadError(null);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -79,7 +123,7 @@ export function Dashboard({
     void refresh();
   }, [refresh]);
 
-  // Keep the board fresh while roommates are logging chores.
+  // Keep everything fresh while roommates are logging chores.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState === "visible") void refresh();
@@ -117,10 +161,12 @@ export function Dashboard({
   async function log(activity: Activity, note: string) {
     const result = await guard(() => api.logEntry(activity.id, note));
     if (!result) return false;
-    showToast(`+${activity.points} pts · ${activity.name}`, "ok", {
-      label: "Undo",
-      run: () => void undo(result.entry),
-    });
+    const bonus = result.entry.bonusPoints;
+    showToast(
+      `+${result.entry.points} pts · ${activity.name}${bonus > 0 ? ` (incl. +${bonus} bonus)` : ""}`,
+      "ok",
+      { label: "Undo", run: () => void undo(result.entry) },
+    );
     await refresh();
     return true;
   }
@@ -151,7 +197,67 @@ export function Dashboard({
   async function changeWeek(week: string) {
     selectedWeek.current = week;
     const next = await guard(() => api.leaderboard(week));
-    if (next) setBoard(next);
+    if (next) setData((prev) => (prev ? { ...prev, board: next } : prev));
+  }
+
+  async function postBounty(activityId: string, bonusPoints: number) {
+    if (!(await guard(() => api.createBounty(activityId, bonusPoints)))) return false;
+    showToast(`Bounty posted: +${bonusPoints}`);
+    await refresh();
+    return true;
+  }
+
+  async function cancelBounty(bounty: Bounty) {
+    if (await guard(() => api.cancelBounty(bounty.id))) await refresh();
+  }
+
+  async function createChallenge(input: NewChallenge) {
+    if (!(await guard(() => api.createChallenge(input)))) return false;
+    showToast("Challenge sent ⚔️");
+    await refresh();
+    return true;
+  }
+
+  async function acceptChallenge(challenge: Challenge) {
+    if (await guard(() => api.acceptChallenge(challenge.id))) {
+      showToast("Challenge accepted. Game on!");
+      await refresh();
+    }
+  }
+
+  async function declineChallenge(challenge: Challenge) {
+    if (await guard(() => api.declineChallenge(challenge.id))) await refresh();
+  }
+
+  async function cancelChallenge(challenge: Challenge) {
+    if (await guard(() => api.cancelChallenge(challenge.id))) await refresh();
+  }
+
+  async function savePrizeSettings(enabled: boolean, prizes: number[]) {
+    if (!(await guard(() => api.savePrizeSettings(enabled, prizes)))) return false;
+    showToast("Prize rules saved");
+    await refresh();
+    return true;
+  }
+
+  async function saveUpi(upiId: string) {
+    const result = await guard(() => api.saveUpi(upiId));
+    if (!result) return false;
+    onUserUpdated(result.user);
+    showToast(upiId ? "UPI ID saved" : "UPI ID removed");
+    await refresh();
+    return true;
+  }
+
+  async function markPaid(week: Settlement, transfer: Transfer, paid: boolean) {
+    if (await guard(() => api.markPaid(week.id, transfer.id, paid))) {
+      showToast(paid ? "Marked as paid" : "Marked as unpaid");
+      await refresh();
+    }
+  }
+
+  async function share(week: WeekResult) {
+    await shareText(weekShareText(household.name, week, user.id));
   }
 
   async function copyCode() {
@@ -169,7 +275,16 @@ export function Dashboard({
     if (result) onLeft(result.user);
   }
 
-  const roommateCount = board?.standings.length ?? household.members.length;
+  const roommateCount = data?.current.standings.length ?? household.members.length;
+
+  // Little dots on the tabs that need attention.
+  const waitingDuels = data
+    ? data.challenges.filter((c) => c.status === "pending" && c.opponentId === user.id).length
+    : 0;
+  const openPayments = data
+    ? data.prizes.weeks.flatMap((w) => w.transfers).filter((t) => !t.paid && (t.fromId === user.id || t.toId === user.id)).length
+    : 0;
+  const attention: Partial<Record<Tab, number>> = { battle: waitingDuels, money: openPayments };
 
   return (
     <div className="mx-auto max-w-md px-5 pb-32">
@@ -209,14 +324,14 @@ export function Dashboard({
       </header>
 
       <main>
-        {!board && loadError ? (
+        {!data && loadError ? (
           <div className="space-y-3">
             <ErrorNote>{loadError}</ErrorNote>
             <Button variant="soft" onClick={() => void refresh()}>
               Try again
             </Button>
           </div>
-        ) : !board ? (
+        ) : !data ? (
           <p className="py-16 text-center text-muted">Loading the scoreboard…</p>
         ) : (
           <>
@@ -226,15 +341,55 @@ export function Dashboard({
               </div>
             ) : null}
             {tab === "board" ? (
-              <BoardTab board={board} meId={user.id} onWeekChange={changeWeek} onLogClick={() => setTab("log")} />
+              <BoardTab
+                board={data.board}
+                meId={user.id}
+                prizeSettings={data.prizes.settings}
+                badges={data.badges}
+                history={data.history}
+                onWeekChange={changeWeek}
+                onLogClick={() => setTab("log")}
+                onShare={share}
+              />
             ) : null}
             {tab === "log" ? (
-              <LogTab activities={activities} onLog={log} onCreate={createActivity} onArchive={archiveActivity} />
+              <LogTab
+                activities={data.activities}
+                bounties={data.bounties}
+                meId={user.id}
+                onLog={log}
+                onCreate={createActivity}
+                onArchive={archiveActivity}
+                onPostBounty={postBounty}
+                onCancelBounty={cancelBounty}
+              />
+            ) : null}
+            {tab === "battle" ? (
+              <BattleTab
+                current={data.current}
+                challenges={data.challenges}
+                activities={data.activities}
+                members={household.members}
+                meId={user.id}
+                onCreate={createChallenge}
+                onAccept={acceptChallenge}
+                onDecline={declineChallenge}
+                onCancel={cancelChallenge}
+              />
             ) : null}
             {tab === "feed" ? (
-              <FeedTab entries={entries} meId={user.id} onUndo={undo} onDispute={dispute} onReinstate={reinstate} />
+              <FeedTab entries={data.entries} meId={user.id} onUndo={undo} onDispute={dispute} onReinstate={reinstate} />
             ) : null}
-            {tab === "weeks" ? <WeeksTab history={history} meId={user.id} /> : null}
+            {tab === "money" ? (
+              <MoneyTab
+                prizes={data.prizes}
+                user={user}
+                memberCount={roommateCount}
+                onSaveSettings={savePrizeSettings}
+                onSaveUpi={saveUpi}
+                onMarkPaid={markPaid}
+              />
+            ) : null}
           </>
         )}
       </main>
@@ -265,23 +420,32 @@ export function Dashboard({
         aria-label="Sections"
         className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
-        <div className="mx-auto grid max-w-md grid-cols-4">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              aria-current={tab === t.id ? "page" : undefined}
-              className={`flex flex-col items-center gap-0.5 py-2.5 text-xs font-bold transition ${
-                tab === t.id ? "text-accent" : "text-muted"
-              }`}
-            >
-              <span className="text-xl" aria-hidden="true">
-                {t.icon}
-              </span>
-              {t.label}
-            </button>
-          ))}
+        <div className="mx-auto grid max-w-md grid-cols-5">
+          {TABS.map((t) => {
+            const dots = attention[t.id] ?? 0;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                aria-current={tab === t.id ? "page" : undefined}
+                className={`relative flex flex-col items-center gap-0.5 py-2.5 text-xs font-bold transition ${
+                  tab === t.id ? "text-accent" : "text-muted"
+                }`}
+              >
+                <span className="relative text-xl" aria-hidden="true">
+                  {t.icon}
+                  {dots > 0 ? (
+                    <span className="absolute -right-2 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-extrabold text-white">
+                      {dots}
+                    </span>
+                  ) : null}
+                </span>
+                {t.label}
+                {dots > 0 ? <span className="sr-only">, {dots} need your attention</span> : null}
+              </button>
+            );
+          })}
         </div>
       </nav>
     </div>

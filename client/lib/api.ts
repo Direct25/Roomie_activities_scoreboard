@@ -1,8 +1,13 @@
 import type {
   Activity,
+  Bounty,
+  Challenge,
   Entry,
   Household,
   Leaderboard,
+  MemberBadges,
+  NewChallenge,
+  Prizes,
   User,
   WeekResult,
 } from "./types";
@@ -102,4 +107,25 @@ export const api = {
   leaderboard: (week?: string) =>
     request<Leaderboard>(`/leaderboard${week ? `?week=${encodeURIComponent(week)}` : ""}`),
   history: () => request<{ history: WeekResult[] }>("/leaderboard/history"),
+
+  bounties: () => request<{ bounties: Bounty[] }>("/bounties"),
+  createBounty: (activityId: string, bonusPoints: number) =>
+    request<{ bounty: Bounty }>("/bounties", "POST", { activityId, bonusPoints }),
+  cancelBounty: (id: string) => request<{ ok: true }>(`/bounties/${id}`, "DELETE"),
+
+  challenges: () => request<{ challenges: Challenge[] }>("/challenges"),
+  createChallenge: (input: NewChallenge) =>
+    request<{ challenge: Challenge }>("/challenges", "POST", input),
+  acceptChallenge: (id: string) => request<{ challenge: Challenge }>(`/challenges/${id}/accept`, "POST"),
+  declineChallenge: (id: string) => request<{ ok: true }>(`/challenges/${id}/decline`, "POST"),
+  cancelChallenge: (id: string) => request<{ ok: true }>(`/challenges/${id}`, "DELETE"),
+
+  prizes: () => request<Prizes>("/prizes"),
+  savePrizeSettings: (enabled: boolean, prizes: number[]) =>
+    request<{ settings: Prizes["settings"] }>("/prizes/settings", "PUT", { enabled, prizes }),
+  markPaid: (settlementId: string, transferId: string, paid: boolean) =>
+    request<{ ok: true; paid: boolean }>(`/prizes/${settlementId}/transfers/${transferId}/paid`, "POST", { paid }),
+  saveUpi: (upiId: string) => request<{ user: User }>("/auth/me/upi", "PUT", { upiId }),
+
+  badges: () => request<{ badges: MemberBadges[] }>("/badges"),
 };

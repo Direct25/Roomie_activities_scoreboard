@@ -37,8 +37,10 @@ export function FeedTab({
       {entries.map((entry) => {
         const mine = entry.userId === meId;
         const disputed = entry.status === "disputed";
-        const canUndo = mine && now - new Date(entry.createdAt).getTime() < UNDO_WINDOW_MS;
-        const canDispute = !mine && !disputed;
+        // Bonus entries (challenge wins) come from the app, so they can't be undone or disputed.
+        const isBonus = entry.kind === "bonus";
+        const canUndo = mine && !isBonus && now - new Date(entry.createdAt).getTime() < UNDO_WINDOW_MS;
+        const canDispute = !mine && !disputed && !isBonus;
         const canReinstate = disputed && entry.disputedBy === meId;
 
         return (
@@ -52,6 +54,9 @@ export function FeedTab({
                     {entry.activityName}
                   </p>
                   {entry.note ? <p className="mt-0.5 text-sm italic text-muted">“{entry.note}”</p> : null}
+                  {entry.bonusPoints > 0 ? (
+                    <p className="mt-0.5 text-xs font-semibold text-mint">includes +{entry.bonusPoints} bonus</p>
+                  ) : null}
                   <p className="mt-0.5 text-xs text-muted">{timeAgo(entry.createdAt, now)}</p>
                   {disputed ? (
                     <p className="mt-1.5 rounded-xl bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger">

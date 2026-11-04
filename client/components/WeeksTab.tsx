@@ -4,7 +4,15 @@ import { weekLabel } from "@/lib/format";
 import type { WeekResult } from "@/lib/types";
 import { Card, EmptyState } from "./ui";
 
-export function WeeksTab({ history, meId }: { history: WeekResult[]; meId: string }) {
+export function WeeksTab({
+  history,
+  meId,
+  onShare,
+}: {
+  history: WeekResult[];
+  meId: string;
+  onShare: (week: WeekResult) => void;
+}) {
   if (history.length === 0) {
     return (
       <Card>
@@ -20,14 +28,20 @@ export function WeeksTab({ history, meId }: { history: WeekResult[]; meId: strin
       {history.map((week) => (
         <li key={week.weekKey}>
           <Card className="pop-in">
-            <p className="text-xs font-bold uppercase tracking-wide text-muted">
-              {weekLabel(week.startsOn, week.endsOn)}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                {weekLabel(week.startsOn, week.endsOn)}
+              </p>
+              <button
+                type="button"
+                onClick={() => onShare(week)}
+                className="shrink-0 rounded-full bg-bg px-3 py-1 text-xs font-bold"
+              >
+                Share ↗
+              </button>
+            </div>
             <p className="mt-1 text-lg font-extrabold">
-              👑{" "}
-              {week.winners
-                .map((w) => (w.userId === meId ? "You" : w.name))
-                .join(" & ")}
+              👑 {week.winners.map((w) => (w.userId === meId ? "You" : w.name)).join(" & ")}
               <span className="ml-2 text-sm font-semibold text-muted">
                 {week.winners[0].points} pts{week.winners.length > 1 ? " each" : ""}
               </span>
