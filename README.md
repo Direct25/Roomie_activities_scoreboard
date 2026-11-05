@@ -108,6 +108,17 @@ npm test
 
 The scoring and calendar tests run anywhere. The API tests need a MongoDB at `TEST_MONGODB_URI` (default `mongodb://127.0.0.1:27017/roomie_scoreboard_test`), **wipe all collections in that database**, and are skipped if none is reachable. Point them at a throwaway database only.
 
+### Deploy for free (MongoDB Atlas + Render + Vercel)
+
+Everything below works from a phone browser. Do the steps in this order, because each one needs the address from the one before.
+
+1. **Database (MongoDB Atlas).** Create a free **M0** cluster. Add a database user (username and password), and under *Network Access* allow `0.0.0.0/0` (Render's free tier has no fixed IP, so the database's login is what protects it). Under *Connect → Drivers* copy the connection string, replace `<password>`, and put the database name before the `?`, like `mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/roomie_scoreboard?retryWrites=true&w=majority`.
+2. **API (Render).** *New → Blueprint*, pick this repo, and Render reads [`render.yaml`](render.yaml). It asks for two values: `MONGODB_URI` (the string from step 1) and `CLIENT_ORIGIN` (enter `http://localhost:3000` for now). The `JWT_SECRET` is generated for you. When it's live, open `https://<your-api>.onrender.com/api/health`. It should show `{"ok":true}`.
+3. **Web app (Vercel).** *Add New → Project*, import this repo, set **Root Directory** to `client`, and add the environment variable `NEXT_PUBLIC_API_URL` = your Render address (no trailing slash). Deploy.
+4. **Connect them.** Back on Render, change `CLIENT_ORIGIN` to your Vercel address (no trailing slash). Render redeploys by itself. Open the Vercel address and sign up.
+
+`NEXT_PUBLIC_API_URL` is baked in at build time, so if the API address ever changes, redeploy the Vercel project. Render's free web service sleeps after about 15 minutes without traffic, so the first visit after a quiet spell takes up to a minute.
+
 ### Production
 
 - Server: `npm run build && npm start`. Set `NODE_ENV=production`, `JWT_SECRET` (16+ characters, required), `MONGODB_URI`, and `CLIENT_ORIGIN` (comma-separated list of allowed web origins). Set `TRUST_PROXY=1` behind a reverse proxy so rate limits see real client IPs.
